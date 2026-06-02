@@ -13,6 +13,26 @@
 #include "HttpRequest.h"
 #include "HttpResponse.h"
 
+namespace {
+
+constexpr int64_t kIdleTimeoutMs = 5000;
+
+void refreshIdleTimer(EventLoop *loop, const std::weak_ptr<Channel>& weakCh) {
+    auto ch = weakCh.lock();
+    if (!ch) return;
+
+    int fd = ch->fd();
+    loop->addTimer(fd, EventLoop::nowMs() + kIdleTimeoutMs, [weakCh]() {
+        auto ch = weakCh.lock();
+        if (!ch) return;
+
+        std::cout << "[TIMER] idle connection timeout fd=" << ch->fd() << std::endl;
+        ch->handleClose();
+    });
+}
+
+} // namespace
+
 int main() {
     int listenFd = socket(AF_INET, SOCK_STREAM, 0);
     int opt = 1;
@@ -65,6 +85,8 @@ int main() {
                     ssize_t n = ch->inputBuffer().readFromFd(ch->fd());
 
                     if (n > 0) {
+                        refreshIdleTimer(workerLoop, weakCh);
+
                         const char* end = strstr(ch->inputBuffer().data(), "\r\n\r\n");
                         if (end) {
                             size_t requestLen = end - ch->inputBuffer().data() + 4;
@@ -118,6 +140,7 @@ int main() {
                     });
                 });
 
+                refreshIdleTimer(workerLoop, weakCh);
                 clientChannel->enableReading();
             });
         }
