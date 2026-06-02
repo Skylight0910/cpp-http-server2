@@ -40,6 +40,7 @@ public:
 private:
     void doPendingFunctors();
     void wakeup();
+    void removeTimerInLock(int id);
 
     int epollFd_;
     std::vector<struct epoll_event> events_;
