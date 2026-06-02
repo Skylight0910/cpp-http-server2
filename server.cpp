@@ -1,11 +1,12 @@
-#include <iostream>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <cstring>
-#include <memory>
-#include <vector>
 #include <atomic>
+#include <cstdint>
+#include <cstring>
+#include <iostream>
+#include <memory>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#include <vector>
 
 #include "Channel.h"
 #include "EventLoop.h"
@@ -46,7 +47,7 @@ int main() {
     bind(listenFd, (struct sockaddr*)&addr, sizeof(addr));
     listen(listenFd, 5);
 
-    std::cout << "服务器启动，监听端口 8080" << std::endl;
+    std::cout << "Server started on port 8080" << std::endl;
 
     EventLoop mainLoop;
     const int numWorkers = 3;
@@ -67,17 +68,16 @@ int main() {
         socklen_t clilen = sizeof(cliaddr);
         int clientFd = accept(listenFd, (struct sockaddr*)&cliaddr, &clilen);
 
-        if (clientFd > 0) {
+        if (clientFd >= 0) {
             int idx = nextWorker.fetch_add(1) % numWorkers;
             EventLoop *workerLoop = workerLoops[idx];
-            std::cout << "新连接: fd=" << clientFd << " → worker" << idx << std::endl;
+            std::cout << "New connection fd=" << clientFd << " -> worker" << idx << std::endl;
 
             workerLoop->runInLoop([workerLoop, clientFd]() {
                 auto clientChannel = std::make_shared<Channel>(clientFd, workerLoop);
                 workerLoop->holdChannel(clientChannel);
                 std::weak_ptr<Channel> weakCh = clientChannel;
 
-                // ===== 读回调 =====
                 clientChannel->setReadCallback([weakCh, workerLoop]() {
                     auto ch = weakCh.lock();
                     if (!ch) return;
@@ -90,11 +90,12 @@ int main() {
                         const char* end = strstr(ch->inputBuffer().data(), "\r\n\r\n");
                         if (end) {
                             size_t requestLen = end - ch->inputBuffer().data() + 4;
-                            std::string rawRequest = ch->inputBuffer().retrieveAsString(requestLen);
+                            std::string rawRequest =
+                                ch->inputBuffer().retrieveAsString(requestLen);
 
                             HttpRequest request;
                             if (request.parse(rawRequest)) {
-                                std::cout << "收到请求: " << request.method() << " "
+                                std::cout << "Request: " << request.method() << " "
                                           << request.path() << std::endl;
 
                                 HttpResponse response;
@@ -110,32 +111,20 @@ int main() {
 
                                 std::string responseStr = response.toString();
                                 send(ch->fd(), responseStr.data(), responseStr.size(), 0);
-                                // 立即关闭写端，通知客户端传输完毕
                                 shutdown(ch->fd(), SHUT_WR);
                             }
                         }
-
-                        // ===== 无害定时器：只打印日志，不做任何清理，用于验证定时器是否阻塞 =====
-                        int64_t newExpire = EventLoop::nowMs() + 5000; // 5秒后触发
-                        workerLoop->addTimer(ch->fd(), newExpire, [weakCh]() {
-                            auto ch = weakCh.lock();
-                            if (ch) {
-                                std::cout << "[TIMER] 定时器触发 fd=" << ch->fd() << std::endl;
-                                // 暂时不做任何清理，只观察
-                            }
-                        });
                     } else {
                         ch->handleClose();
                     }
                 });
 
-                // ===== 关闭回调（只设置一次） =====
                 clientChannel->setCloseCallback([workerLoop, weakCh]() {
-                    std::cout << "[CLOSE] 关闭回调触发" << std::endl;
                     workerLoop->runInLoop([workerLoop, weakCh]() {
                         auto ch = weakCh.lock();
                         if (!ch) return;
-                        std::cout << "[CLOSE] 执行清理 fd=" << ch->fd() << std::endl;
+
+                        std::cout << "[CLOSE] remove fd=" << ch->fd() << std::endl;
                         workerLoop->removeChannel(ch.get());
                     });
                 });
