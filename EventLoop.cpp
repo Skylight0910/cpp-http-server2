@@ -123,9 +123,12 @@ void EventLoop::updateChannel(Channel *channel) {
 
 void EventLoop::removeChannel(Channel *channel) {
     int fd = channel->fd();
+
+    removeTimer(fd);
     
     if (fdInEpoll_.find(fd) == fdInEpoll_.end() || !fdInEpoll_[fd]) {
         std::cout << "  -> 跳过重复删除 fd=" << fd << std::endl;
+        activeChannels_.erase(fd);
         return;
     }
 
@@ -145,7 +148,7 @@ void EventLoop::holdChannel(std::shared_ptr<Channel> channel) {
 
 void EventLoop::addTimer(int id, int64_t expireTime, Timer::TimerCallback cb) {
     std::lock_guard<std::mutex> lock(timerMutex_);
-    removeTimer(id);
+    removeTimerInLock(id);
     auto timer = std::make_shared<Timer>(expireTime, std::move(cb));
     timerMap_[id] = timer;
     timers_.insert({expireTime, id});
@@ -153,6 +156,10 @@ void EventLoop::addTimer(int id, int64_t expireTime, Timer::TimerCallback cb) {
 
 void EventLoop::removeTimer(int id) {
     std::lock_guard<std::mutex> lock(timerMutex_);
+    removeTimerInLock(id);
+}
+
+void EventLoop::removeTimerInLock(int id) {
     auto it = timerMap_.find(id);
     if (it != timerMap_.end()) {
         int64_t expireTime = it->second->expireTime();
