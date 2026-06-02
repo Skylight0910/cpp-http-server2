@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <sys/epoll.h>
 #include <vector>
 #include <map>
