@@ -128,7 +128,7 @@ void Channel::flushOutput() {
     }
     disableWriting();  // 全部发完，取消对 EPOLLOUT 的关注
 
-    if (rejected_) {
+    if (rejected_ || closeAfterFlush_) {
         handleClose();  // 拒绝响应已全部送达，现在才真正关闭
     }
 }

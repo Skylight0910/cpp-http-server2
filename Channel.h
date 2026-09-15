@@ -40,6 +40,7 @@ public:
     void sendData(const std::string& data);
     void flushOutput();
     void reject(const std::string& response);
+    void setCloseAfterFlush(bool value) { closeAfterFlush_ = value; }
 
 private:
     void update();
@@ -56,6 +57,7 @@ private:
     bool tied_ = false;
 
     bool rejected_ = false;
+    bool closeAfterFlush_ = false;
     
     Buffer inputBuffer_;
     Buffer outputBuffer_;

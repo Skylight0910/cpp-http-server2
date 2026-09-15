@@ -16,12 +16,16 @@ void HttpResponse::setBody(const std::string& body) {
     body_ = body;
 }
 
+void HttpResponse::setConnection(const std::string& value) {
+    connection_ = value;
+}
+
 std::string HttpResponse::toString() const {
     std::ostringstream oss;
     oss << "HTTP/1.1 " << statusCode_ << " " << statusMessage_ << "\r\n";
     oss << headers_;
     oss << "Content-Length: " << body_.size() << "\r\n";
-    oss << "Connection: close\r\n";
+    oss << "Connection: " << connection_ << "\r\n";
     oss << "\r\n";
     oss << body_;
     return oss.str();

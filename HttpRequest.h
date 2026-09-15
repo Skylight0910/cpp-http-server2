@@ -20,6 +20,7 @@ public:
     const std::string& path() const { return path_; }
     const std::string& version() const { return version_; }
     const std::string& getHeader(const std::string& key) const;
+    bool shouldKeepAlive() const;
 
     void reset();
 

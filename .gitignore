@@ -1,5 +1,7 @@
 server
 server_release
+build/
+cmake-build-*/
 *.o
 *.d
 core

@@ -8,6 +8,7 @@ public:
     void setStatus(int code, const std::string& message);
     void addHeader(const std::string& key, const std::string& value);
     void setBody(const std::string& body);
+    void setConnection(const std::string& value);
     std::string toString() const;
 
 private:
@@ -15,4 +16,5 @@ private:
     std::string statusMessage_;
     std::string headers_;
     std::string body_;
+    std::string connection_ = "close";
 };

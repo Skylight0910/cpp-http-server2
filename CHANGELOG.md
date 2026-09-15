@@ -3,6 +3,24 @@
 本项目的所有显著变更都记录在此文件中。
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [未发布] - 2026-09-15
+
+### 新增
+
+- CMake 构建、核心单元测试、Linux CI 和冒烟测试脚本。
+- 启动参数：端口、worker 数、空闲超时时间、请求头上限。
+- 默认 worker 数从 3 调整为 1，依据 2 vCPU 短连接压测结果。
+- 非法请求返回 `400 Bad Request`，请求行和请求头解析增加基础校验。
+- 非 `GET` 方法返回 `405 Method Not Allowed`；完整但超长的请求头也会返回 `431`。
+- 支持 HTTP/1.1 keep-alive、顺序复用和 pipeline 请求；`Connection: close` 时关闭连接。
+- keep-alive 压测：2 vCPU / 1 worker / 100,000 请求下，QPS 从约 13,000 提升至约 55,000，失败请求为 0。
+
+### 变更
+
+- socket 创建、`fcntl`、`setsockopt`、`bind`、`listen` 增加显式错误处理。
+- 移除仓库中的二进制构建产物，改为通过 CMake 构建。
+- README 补充架构、使用方式、测试方法、当前限制和后续计划。
+
 ## [0.2.0] - 2026-09-15
 
 ### 新增
