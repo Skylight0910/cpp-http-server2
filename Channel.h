@@ -31,6 +31,9 @@ public:
     void handleClose();  // 新增：安全触发关闭流程
 
     Buffer& inputBuffer() { return inputBuffer_; }
+    Buffer& outputBuffer() { return outputBuffer_; }
+    void sendData(const std::string& data);
+    void flushOutput();
 
 private:
     void update();
@@ -44,4 +47,5 @@ private:
     EventCallback closeCallback_;
     
     Buffer inputBuffer_;
+    Buffer outputBuffer_;
 };

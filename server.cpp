@@ -1,6 +1,9 @@
 #include <atomic>
+#include <cerrno>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <fcntl.h>
 #include <iostream>
 #include <memory>
 #include <netinet/in.h>
@@ -17,6 +20,18 @@
 namespace {
 
 constexpr int64_t kIdleTimeoutMs = 5000;
+
+void setNonBlocking(int fd) {
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags < 0) {
+        perror("fcntl(F_GETFL)");
+        exit(1);
+    }
+    if (fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        perror("fcntl(F_SETFL)");
+        exit(1);
+    }
+}
 
 void refreshIdleTimer(EventLoop *loop, const std::weak_ptr<Channel>& weakCh) {
     auto ch = weakCh.lock();
@@ -36,6 +51,7 @@ void refreshIdleTimer(EventLoop *loop, const std::weak_ptr<Channel>& weakCh) {
 
 int main() {
     int listenFd = socket(AF_INET, SOCK_STREAM, 0);
+    setNonBlocking(listenFd);
     int opt = 1;
     setsockopt(listenFd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
@@ -45,7 +61,7 @@ int main() {
     addr.sin_port = htons(8080);
     addr.sin_addr.s_addr = INADDR_ANY;
     bind(listenFd, (struct sockaddr*)&addr, sizeof(addr));
-    listen(listenFd, 5);
+    listen(listenFd, SOMAXCONN);
 
     std::cout << "Server started on port 8080" << std::endl;
 
@@ -64,11 +80,21 @@ int main() {
     Channel listenChannel(listenFd, &mainLoop);
 
     listenChannel.setReadCallback([&]() {
-        struct sockaddr_in cliaddr;
-        socklen_t clilen = sizeof(cliaddr);
-        int clientFd = accept(listenFd, (struct sockaddr*)&cliaddr, &clilen);
+        // 非阻塞 accept：一次 EPOLLIN 可能积压多个连接，循环取直到 EAGAIN
+        while (true) {
+            struct sockaddr_in cliaddr;
+            socklen_t clilen = sizeof(cliaddr);
+            int clientFd = accept(listenFd, (struct sockaddr*)&cliaddr, &clilen);
 
-        if (clientFd >= 0) {
+            if (clientFd < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) break;  // 本次连接已取完
+                if (errno == EINTR) continue;                        // 被信号打断，重试
+                std::cerr << "[ACCEPT] error: " << strerror(errno) << std::endl;
+                break;
+            }
+
+            setNonBlocking(clientFd);
+
             int idx = nextWorker.fetch_add(1) % numWorkers;
             EventLoop *workerLoop = workerLoops[idx];
             std::cout << "New connection fd=" << clientFd << " -> worker" << idx << std::endl;
@@ -110,13 +136,33 @@ int main() {
                                 }
 
                                 std::string responseStr = response.toString();
-                                send(ch->fd(), responseStr.data(), responseStr.size(), 0);
-                                shutdown(ch->fd(), SHUT_WR);
+                                ch->sendData(responseStr);
+
+                                // 数据全部直接发完才关闭写端；
+                                // 有剩余在输出缓冲区时，等冲刷完由对端关闭/定时器兜底
+                                if (ch->outputBuffer().empty()) {
+                                    shutdown(ch->fd(), SHUT_WR);
+                                }
                             }
                         }
+                    } else if (n == 0) {
+                        ch->handleClose();  // 对端正常关闭
                     } else {
-                        ch->handleClose();
+                        // n < 0：EAGAIN 不是错误；真实错误才断连
+                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                            // LT 模式下一般不会走到这里，防御性保留连接
+                        } else {
+                            std::cerr << "[READ] error fd=" << ch->fd()
+                                      << " errno=" << strerror(errno) << std::endl;
+                            ch->handleClose();
+                        }
                     }
+                });
+
+                clientChannel->setWriteCallback([weakCh]() {
+                    auto ch = weakCh.lock();
+                    if (!ch) return;
+                    ch->flushOutput();
                 });
 
                 clientChannel->setCloseCallback([workerLoop, weakCh]() {

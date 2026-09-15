@@ -1,5 +1,6 @@
 #include "Buffer.h"
 #include <iostream>
+#include <cerrno>
 
 Buffer::Buffer() {
     buffer_.reserve(4096);
@@ -7,11 +8,25 @@ Buffer::Buffer() {
 
 ssize_t Buffer::readFromFd(int fd) {
     char tmp[4096];
-    ssize_t n = recv(fd, tmp, sizeof(tmp), 0);
-    if (n > 0) {
-        buffer_.append(tmp, n);
+    while (true) {
+        ssize_t n = recv(fd, tmp, sizeof(tmp), 0);
+        if (n > 0) {
+            buffer_.append(tmp, n);
+            return n;
+        }
+        if (n == 0) return 0;          // 对端正常关闭
+        if (errno == EINTR) continue;  // 被信号打断，重试
+        return -1;                     // EAGAIN 或真实错误，由调用方检查 errno
     }
-    return n;
+}
+
+void Buffer::retrieve(size_t len) {
+    if (len > buffer_.size()) len = buffer_.size();
+    buffer_.erase(0, len);
+}
+
+void Buffer::append(const char* data, size_t len) {
+    buffer_.append(data, len);
 }
 
 const char* Buffer::data() const {
