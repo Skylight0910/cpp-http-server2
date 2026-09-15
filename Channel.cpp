@@ -127,4 +127,19 @@ void Channel::flushOutput() {
         return;
     }
     disableWriting();  // 全部发完，取消对 EPOLLOUT 的关注
+
+    if (rejected_) {
+        handleClose();  // 拒绝响应已全部送达，现在才真正关闭
+    }
+}
+
+void Channel::reject(const std::string& response) {
+    rejected_ = true;
+    disableReading();   // 冻结输入：摘掉 EPOLLIN，Buffer 从此封顶
+    sendData(response); // 尽力直发；内核缓冲满时剩余进输出缓冲区
+
+    if (outputBuffer().empty()) {
+        handleClose();  // 已全部发出，立即关闭
+    }
+    // 否则等 EPOLLOUT 冲刷完，由 flushOutput 触发 handleClose
 }

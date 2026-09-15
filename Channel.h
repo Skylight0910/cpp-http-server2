@@ -39,6 +39,7 @@ public:
     Buffer& outputBuffer() { return outputBuffer_; }
     void sendData(const std::string& data);
     void flushOutput();
+    void reject(const std::string& response);
 
 private:
     void update();
@@ -53,6 +54,8 @@ private:
 
     std::weak_ptr<void> tie_;
     bool tied_ = false;
+
+    bool rejected_ = false;
     
     Buffer inputBuffer_;
     Buffer outputBuffer_;

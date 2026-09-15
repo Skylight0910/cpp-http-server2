@@ -20,6 +20,7 @@
 namespace {
 
 constexpr int64_t kIdleTimeoutMs = 5000;
+constexpr size_t kMaxHeaderSize = 8 * 1024;  // 请求头上限，防恶意连接耗尽内存
 
 void setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -146,6 +147,16 @@ int main() {
                                     shutdown(ch->fd(), SHUT_WR);
                                 }
                             }
+                        } else if (ch->inputBuffer().size() > kMaxHeaderSize) {
+                            // 超过 8KB 仍无完整请求头：恶意或异常客户端，拒绝并断连
+                            std::cerr << "[GUARD] header too large fd=" << ch->fd()
+                                      << " size=" << ch->inputBuffer().size() << std::endl;
+
+                            HttpResponse response;
+                            response.setStatus(431, "Request Header Fields Too Large");
+                            response.addHeader("Content-Type", "text/html; charset=utf-8");
+                            response.setBody("<html><body><h1>431</h1></body></html>");
+                            ch->reject(response.toString());
                         }
                     } else if (n == 0) {
                         ch->handleClose();  // 对端正常关闭
