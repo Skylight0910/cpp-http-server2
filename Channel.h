@@ -1,6 +1,7 @@
 #pragma once
 #include <sys/epoll.h>
 #include <functional>
+#include <memory>
 #include "Buffer.h"
 
 class EventLoop;
@@ -18,6 +19,10 @@ public:
     void setReadCallback(EventCallback cb);
     void setWriteCallback(EventCallback cb);
     void setCloseCallback(EventCallback cb);
+
+    // 生命周期保护：owner 用自己的 shared_ptr 调用，
+    // handleEvent 执行期间保证本对象不被销毁
+    void tie(const std::shared_ptr<void>& obj);
 
     void enableReading();
     void disableReading();
@@ -45,6 +50,9 @@ private:
     EventCallback readCallback_;
     EventCallback writeCallback_;
     EventCallback closeCallback_;
+
+    std::weak_ptr<void> tie_;
+    bool tied_ = false;
     
     Buffer inputBuffer_;
     Buffer outputBuffer_;

@@ -11,7 +11,7 @@
 - **SIGPIPE 防护**：`send` 使用 `MSG_NOSIGNAL`，对端异常关闭不会杀死进程
 - **高并发就绪**：`listen` backlog 提升至 `SOMAXCONN`，避免突发连接被内核丢弃
 - **无锁化设计**：每个连接从生到死都在固定线程内处理，避免线程间数据竞争
-- **智能指针管理生命周期**：shared_ptr / weak_ptr 管理 Channel 对象，防止悬垂指针和循环引用
+- **智能指针管理生命周期**：shared_ptr / weak_ptr 管理 Channel，tie 机制保证事件回调执行期间对象不被销毁，杜绝 use-after-free
 - **应用层 Buffer**：解决 TCP 粘包问题，按 `\r\n\r\n` 切分完整 HTTP 请求
 - **定时器**：基于 multiset 的超时管理，空闲连接自动断开
 - **跨线程调度**：runInLoop + eventfd 实现线程安全的任务分发

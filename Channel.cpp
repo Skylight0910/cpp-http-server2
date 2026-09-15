@@ -22,6 +22,11 @@ void Channel::setReadCallback(EventCallback cb) { readCallback_ = std::move(cb);
 void Channel::setWriteCallback(EventCallback cb) { writeCallback_ = std::move(cb); }
 void Channel::setCloseCallback(EventCallback cb) { closeCallback_ = std::move(cb); }
 
+void Channel::tie(const std::shared_ptr<void>& obj) {
+    tie_ = obj;
+    tied_ = true;
+}
+
 void Channel::enableReading() {
     events_ |= EPOLLIN;
     update();
@@ -47,6 +52,14 @@ void Channel::update() {
 }
 
 void Channel::handleEvent(uint32_t revents) {
+    // 生命周期守卫：回调链中可能触发关闭并从 owner 的 map 中移除本对象，
+    // 先把 weak_ptr 提升为 shared_ptr，保证 handleEvent 返回前对象不被销毁
+    std::shared_ptr<void> guard;
+    if (tied_) {
+        guard = tie_.lock();
+        if (!guard) return;  // 对象已被销毁，忽略过期事件
+    }
+
     if (revents & (EPOLLHUP | EPOLLERR)) {
         handleClose();
         return;

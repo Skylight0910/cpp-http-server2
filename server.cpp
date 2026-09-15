@@ -102,6 +102,8 @@ int main() {
             workerLoop->runInLoop([workerLoop, clientFd]() {
                 auto clientChannel = std::make_shared<Channel>(clientFd, workerLoop);
                 workerLoop->holdChannel(clientChannel);
+                // Channel 生命周期保护：回调链触发关闭时，保证本次事件处理完整结束
+                clientChannel->tie(clientChannel);
                 std::weak_ptr<Channel> weakCh = clientChannel;
 
                 clientChannel->setReadCallback([weakCh, workerLoop]() {
